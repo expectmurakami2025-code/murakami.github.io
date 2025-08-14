@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ガラガラ球占い（音なし）</title>
+<title>ガラガラ球占い</title>
 <style>
   body{font-family:system-ui,-apple-system,"Segoe UI",Meiryo,Arial,sans-serif;text-align:center;background:#fafafa;margin:0;padding:24px}
   #videoCanvas{background:transparent;cursor:pointer;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
@@ -17,7 +17,6 @@
 <body>
 
 <h1>ガラガラ球占い（音なし）</h1>
-<p class="note">長押ししている間は <b>0〜1秒</b> をループ（緑抜き）／離すと続き再生 → <b>終了時に占い表示</b></p>
 
 <canvas id="videoCanvas" width="300" height="300" title="ここを長押し！"></canvas>
 <div id="fortune">（ここに占い結果が表示されます）</div>
@@ -117,7 +116,7 @@ function showFortune() {
 function pressStart(){
   if (playing) return;       // 通常再生中は無視
   spinning = true;
-  fortuneBox.textContent = "（長押し中… 離すと続きが再生され、終わったら占いが出ます）";
+  fortuneBox.textContent = "（長押し中… 離すと,占いが出ます）";
   video.currentTime = LOOP_START;
   video.play().catch(()=>{});
   if (!rafId) draw();
@@ -159,3 +158,4 @@ setTimeout(()=>{ if (!rafId) draw(); }, 1500);
 </script>
 </body>
 </html>
+

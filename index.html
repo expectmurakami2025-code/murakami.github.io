@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ガラガラ球占い（音なし）</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",Meiryo,Arial,sans-serif;text-align:center;background:#fafafa;margin:0;padding:24px}
+  #videoCanvas{background:transparent;cursor:pointer;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
+  #fortune{white-space:pre-line;margin:14px auto;max-width:520px;text-align:left;background:#fff;border:1px dashed #ccd;padding:12px;border-radius:10px}
+  #clearHistory{margin-top:10px;padding:6px 12px;border:none;background:#d9534f;color:#fff;border-radius:6px;cursor:pointer}
+  #clearHistory:hover{background:#c9302c}
+  .history-item{border-top:1px solid #e8e8e8;padding:8px 0;text-align:left;max-width:520px;margin:0 auto}
+  p.note{color:#666;margin:8px 0 16px}
+</style>
+</head>
+<body>
+
+<h1>ガラガラ球占い（音なし）</h1>
+<p class="note">長押ししている間は <b>0〜1秒</b> をループ（緑抜き）／離すと続き再生 → <b>終了時に占い表示</b></p>
+
+<canvas id="videoCanvas" width="300" height="300" title="ここを長押し！"></canvas>
+<div id="fortune">（ここに占い結果が表示されます）</div>
+
+<!-- 履歴と削除ボタン -->
+<button id="clearHistory">履歴を削除</button>
+<div id="history"></div>
+
+<!-- 非表示の動画のみ（音声は削除） -->
+<video id="src" src="garagara.mp4" playsinline preload="auto" style="display:none"></video>
+
+<script>
+/* ===== 占いデータ ===== */
+const SUBJECTS = ["読書","算数","漢字","理科","人物のネタ","英語"];
+const MISSIONS = ["本を5分読む","算数ドリル3問","漢字1つ調べる","植物や虫を1種類調べる","歴史上の人物1人調べる","英単語3つ覚える"];
+const MESSAGES = ["短時間でも集中すれば進むよ！","今日わからなかったことは未来の宝物になるよ。","苦手な分野も1日1つなら楽勝！"];
+const FORTUNE_RANKS = ["📚大吉","📝中吉","💡吉","🙂小吉","🌱末吉"];
+
+const canvas = document.getElementById("videoCanvas");
+const ctx = canvas.getContext("2d", {willReadFrequently:true});
+const video = document.getElementById("src");
+const fortuneBox = document.getElementById("fortune");
+const historyBox = document.getElementById("history");
+const clearHistoryBtn = document.getElementById("clearHistory");
+
+const LOOP_START = 0.0;
+const LOOP_END   = 1.0;
+
+let spinning = false;   // 0-1秒ループ中？
+let playing  = false;   // 通常再生中？
+let rafId;
+
+/* ===== 描画＋簡易クロマキー（緑→透明） ===== */
+function draw() {
+  const vw = video.videoWidth || canvas.width;
+  const vh = video.videoHeight || canvas.height;
+  const scale = Math.min(canvas.width/vw, canvas.height/vh);
+  const dw = Math.round(vw*scale), dh = Math.round(vh*scale);
+  const dx = (canvas.width - dw) >> 1, dy = (canvas.height - dh) >> 1;
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if (!video.paused && !video.ended) {
+    ctx.drawImage(video, dx, dy, dw, dh);
+
+    // 簡易的なキーイング（明るい緑を主に除去）
+    const img = ctx.getImageData(dx, dy, dw, dh);
+    const d = img.data;
+    for (let i=0;i<d.length;i+=4){
+      const r=d[i], g=d[i+1], b=d[i+2];
+      // 必要に応じて閾値は調整してください
+      if (g > 110 && r < 120 && b < 120 && g > r + 25 && g > b + 25) {
+        d[i+3] = 0; // 透明化
+      }
+    }
+    ctx.putImageData(img, dx, dy);
+  }
+  rafId = requestAnimationFrame(draw);
+}
+
+/* ===== 0-1秒ループ監視 ===== */
+function loopWatch() {
+  if (!spinning) return;
+  if (video.currentTime >= LOOP_END || video.currentTime < LOOP_START) {
+    video.currentTime = LOOP_START + 0.001;
+  }
+  requestAnimationFrame(loopWatch);
+}
+
+/* ===== 占い ===== */
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+function doFortune() {
+  const rank = pick(FORTUNE_RANKS);
+  const subject = pick(SUBJECTS);
+  const mission = pick(MISSIONS);
+  const message = pick(MESSAGES);
+  const points = Math.floor(Math.random()*8)+3;
+  const bar = "■".repeat(points) + "□".repeat(10-points);
+  const text =
+    "🎉 今日のべんきょううん 🎉\n\n" +
+    `運勢： ${rank}\n` +
+    `やる気パワー： ${bar}（${points}/10）\n\n` +
+    `📖 おすすめ教科： ${subject}\n` +
+    `🎯 今日のミッション： ${mission}\n\n` +
+    `💬 メッセージ： ${message}`;
+  return {text};
+}
+function showFortune() {
+  const f = doFortune();
+  fortuneBox.textContent = f.text;
+  const div = document.createElement("div");
+  div.className = "history-item";
+  div.textContent = `${new Date().toLocaleString()}\n${f.text}`;
+  historyBox.prepend(div);
+}
+
+/* ===== 入力（PC/スマホ） ===== */
+function pressStart(){
+  if (playing) return;       // 通常再生中は無視
+  spinning = true;
+  fortuneBox.textContent = "（長押し中… 離すと続きが再生され、終わったら占いが出ます）";
+  video.currentTime = LOOP_START;
+  video.play().catch(()=>{});
+  if (!rafId) draw();
+  loopWatch();
+}
+function pressEnd(){
+  if (playing) return;
+  spinning = false;
+  playing = true;
+  // 続きから最後まで再生
+  video.currentTime = LOOP_END;
+  video.play().catch(()=>{});
+}
+
+/* ===== 再生終了時に占い ===== */
+video.addEventListener('ended', () => {
+  if (!playing) return;   // 通常再生が終わったときだけ
+  playing = false;
+  cancelAnimationFrame(rafId); rafId = null; // 描画ループ整理（任意）
+  showFortune();
+});
+
+/* ===== 履歴削除 ===== */
+clearHistoryBtn.addEventListener("click", () => {
+  if (confirm("履歴をすべて削除しますか？")) {
+    historyBox.innerHTML = "";
+  }
+});
+
+/* ===== イベント登録 ===== */
+canvas.addEventListener('mousedown', e => { e.preventDefault(); pressStart(); });
+window.addEventListener('mouseup',   e => { e.preventDefault(); pressEnd(); });
+canvas.addEventListener('touchstart', e => { e.preventDefault(); pressStart(); }, {passive:false});
+window.addEventListener('touchend',   e => { e.preventDefault(); pressEnd(); },   {passive:false});
+
+/* ===== 初期描画開始 ===== */
+video.addEventListener('loadeddata', () => { if (!rafId) draw(); });
+setTimeout(()=>{ if (!rafId) draw(); }, 1500);
+</script>
+</body>
+</html>

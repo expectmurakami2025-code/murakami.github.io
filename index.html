@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="ja">
 <head>
@@ -6,50 +7,174 @@
 <title>ガラガラ球占い</title>
 <style>
   body{font-family:system-ui,-apple-system,"Segoe UI",Meiryo,Arial,sans-serif;text-align:center;background:#fafafa;margin:0;padding:24px}
+  h1{margin:0 0 6px}
+  .muted{color:#666}
+  .stage-wrap{position:relative;display:inline-block}
   #videoCanvas{background:transparent;cursor:pointer;border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.08)}
-  #fortune{white-space:pre-line;margin:14px auto;max-width:520px;text-align:left;background:#fff;border:1px dashed #ccd;padding:12px;border-radius:10px}
-  #clearHistory{margin-top:10px;padding:6px 12px;border:none;background:#d9534f;color:#fff;border-radius:6px;cursor:pointer}
-  #clearHistory:hover{background:#c9302c}
+  .checker{position:absolute;inset:0;background:conic-gradient(#eee 0 25%,#ddd 0 50%,#eee 0 75%,#ddd 0 100%);background-size:24px 24px;opacity:.45;pointer-events:none;border-radius:12px}
+  #hoverHint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:8px 12px;background:rgba(255,255,255,.92);border:1px solid #dfe3f0;border-radius:10px;font-size:14px;color:#333;display:none;pointer-events:none;white-space:nowrap}
+  ruby rt{font-size:.7em;color:#444}
+
+  #fortune{white-space:normal;margin:14px auto;max-width:520px;text-align:left;background:#fff;border:1px dashed #ccd;padding:12px;border-radius:10px;line-height:1.7}
+  #fortune .line{margin:.25em 0}
+  #fortune .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
   .history-item{border-top:1px solid #e8e8e8;padding:8px 0;text-align:left;max-width:520px;margin:0 auto}
-  p.note{color:#666;margin:8px 0 16px}
+  #clearHistory{margin-top:10px;padding:6px 12px;border:1px solid #cfd3e1;background:#f8f9ff;border-radius:8px;cursor:pointer}
+  #clearHistory:hover{background:#eef2ff}
 </style>
 </head>
 <body>
 
 <h1>ガラガラ球占い</h1>
 
-<canvas id="videoCanvas" width="300" height="300" title="ここを長押し！"></canvas>
+<div class="stage-wrap" id="stageWrap" title="ここをながおしして、はなすと「おみくじ」の玉が出ます。">
+  <canvas id="videoCanvas" width="300" height="300"></canvas>
+  <div class="checker"></div>
+</div>
+
 <div id="fortune">（ここに占い結果が表示されます）</div>
 
 <!-- 履歴と削除ボタン -->
 <button id="clearHistory">履歴を削除</button>
 <div id="history"></div>
 
-<!-- 非表示の動画のみ（音声は削除） -->
+<!-- 非表示の動画（音声なし） -->
 <video id="src" src="garagara.mp4" playsinline preload="auto" style="display:none"></video>
 
 <script>
-/* ===== 占いデータ ===== */
-const SUBJECTS = ["読書","算数","漢字","理科","人物のネタ","英語"];
-const MISSIONS = ["本を5分読む","算数ドリル3問","漢字1つ調べる","植物や虫を1種類調べる","歴史上の人物1人調べる","英単語3つ覚える"];
-const MESSAGES = ["短時間でも集中すれば進むよ！","今日わからなかったことは未来の宝物になるよ。","苦手な分野も1日1つなら楽勝！"];
-const FORTUNE_RANKS = ["📚大吉","📝中吉","💡吉","🙂小吉","🌱末吉"];
-
-const canvas = document.getElementById("videoCanvas");
-const ctx = canvas.getContext("2d", {willReadFrequently:true});
-const video = document.getElementById("src");
-const fortuneBox = document.getElementById("fortune");
-const historyBox = document.getElementById("history");
-const clearHistoryBtn = document.getElementById("clearHistory");
-
+/* ===== 設定・状態 ===== */
 const LOOP_START = 0.0;
 const LOOP_END   = 1.0;
+let spinning=false, playing=false, shouldShowFortune=false, rafId=null;
 
-let spinning = false;   // 0-1秒ループ中？
-let playing  = false;   // 通常再生中？
-let rafId;
+/* ===== ふりがな辞書 ===== */
+const RUBIES = [
+  ["読書","どくしょ"],["算数","さんすう"],["漢字","かんじ"],["理科","りか"],["人物","じんぶつ"],["英語","えいご"],
+  ["登場人物","とうじょうじんぶつ"],["性格","せいかく"],["言葉","ことば"],["意味","いみ"],["感想","かんそう"],["音読","おんどく"],
+  ["場面","ばめん"],["章","しょう"],["予想","よそう"],["表紙","ひょうし"],["理由","りゆう"],
+  ["計算","けいさん"],["合計","ごうけい"],["暗算","あんざん"],["九九","くく"],["図形","ずけい"],["棒グラフ","ぼうグラフ"],
+  ["割り算","わりざん"],["筆算","ひっさん"],["時間","じかん"],["重さ","おもさ"],["分数","ぶんすう"],
+  ["同音異義語","どうおんいぎご"],["例文","れいぶん"],["部首","ぶしゅ"],["由来","ゆらい"],["成り立ち","なりたち"],
+  ["植物","しょくぶつ"],["観察","かんさつ"],["記録","きろく"],["天気","てんき"],["方角","ほうがく"],["磁石","じしゃく"],
+  ["太陽","たいよう"],["位置","いち"],["影","かげ"],["分類","ぶんるい"],["成長","せいちょう"],["星座","せいざ"],
+  ["時代","じだい"],["出来事","できごと"],["年表","ねんぴょう"],["地図","ちず"],["名言","めいげん"],["同時代","どうじだい"],["共通点","きょうつうてん"],
+  ["似顔絵","にがおえ"],["質問","しつもん"],["関連","かんれん"],["新事実","しんじじつ"],["箇条書き","かじょうがき"],
+  ["英単語","えいたんご"],["英文","えいぶん"],["自己紹介","じこしょうかい"],["発音","はつおん"],["数字","すうじ"],["時刻","じこく"],["動詞","どうし"]
+];
+const rubyMap=new Map(RUBIES);
+function applyRuby(str){
+  let out=str;
+  const keys=[...rubyMap.keys()].sort((a,b)=>b.length-a.length);
+  for(const k of keys){
+    const rt=rubyMap.get(k);
+    out=out.replace(new RegExp(k,"g"), `<ruby><rb>${k}</rb><rt>${rt}</rt></ruby>`);
+  }
+  return out;
+}
 
-/* ===== 描画＋簡易クロマキー（緑→透明） ===== */
+/* ===== 占いデータ（小学生向けミッション） ===== */
+const SUBJECTS=["読書","算数","漢字","理科","人物のネタ","英語"];
+const LEVEL_LABEL={1:"やさしい",2:"ふつう",3:"チャレンジ"};
+const SUBJECT_MISSIONS = {
+  "読書":[
+    {text:"好きな本を5分だけ読もう。読んだページをメモする。",level:1,minutes:5},
+    {text:"登場人物を1人えらび、すきなところを1行書こう。",level:1,minutes:6},
+    {text:"知らない言葉を1つ見つけて、意味をしらべよう。",level:1,minutes:6},
+    {text:"今日おもしろかった文を1つ書き写してみよう。",level:2,minutes:7},
+    {text:"音読を1ページして、ゆっくりはっきり読む。",level:1,minutes:5},
+    {text:"お話のはじまり・なか・おわりを1行ずつ書く。",level:2,minutes:8},
+    {text:"つづきの予想を2行で書いてみよう。",level:2,minutes:8},
+    {text:"登場人物の気もちを1つ想像して書こう。",level:2,minutes:7},
+    {text:"表紙の絵のいいところを3つ見つけよう。",level:1,minutes:5},
+    {text:"友だちにおすすめしたい理由を2つ書こう。",level:3,minutes:10}
+  ],
+  "算数":[
+    {text:"計算（たしざん・ひきざん）を3問やってみよう。",level:1,minutes:5},
+    {text:"九九を1だんだけ声に出して言ってみよう。",level:1,minutes:5},
+    {text:"家の中で「丸・三角・四角」を1つずつ見つける。",level:1,minutes:6},
+    {text:"さいふの小銭で100円になる組みあわせを作る。",level:2,minutes:7},
+    {text:"長さをものさしで1か所はかってメモする。",level:2,minutes:7},
+    {text:"1日の生活で数が出る場面を1つ見つけて書く。",level:1,minutes:5},
+    {text:"図形の辺の数をかぞえて、ちがいを書こう。",level:2,minutes:8},
+    {text:"まちがえた問題を1つえらび、どこでミスか書く。",level:3,minutes:9},
+    {text:"分数(1/2など)の例を1つ身近で見つけよう。",level:2,minutes:7},
+    {text:"時計を見て、いまの時刻と10分後の時刻を書く。",level:1,minutes:5}
+  ],
+  "漢字":[
+    {text:"新しい漢字を2こ、正しい書き順で書こう。",level:1,minutes:6},
+    {text:"同じ部首の漢字を3こ集めてならべよう。",level:2,minutes:8},
+    {text:"ならった漢字で短文を2つ作って書こう。",level:2,minutes:8},
+    {text:"にている漢字2つのちがいを1行で説明しよう。",level:3,minutes:9},
+    {text:"送りがなに気をつけてことばを3つ書こう。",level:2,minutes:7},
+    {text:"熟語を3つえらび、読みをかこう。",level:1,minutes:6},
+    {text:"書き取りを1行だけ、ゆっくりていねいに書く。",level:1,minutes:5},
+    {text:"今日の漢字1つで、ことばを3つ作ろう。",level:2,minutes:7},
+    {text:"好きな漢字の意味や由来を1つしらべる。",level:3,minutes:10},
+    {text:"部首と画数を1つしらべてノートに書こう。",level:2,minutes:7}
+  ],
+  "理科":[
+    {text:"外やベランダの植物を1つ見つけて、葉の形をスケッチ。",level:1,minutes:8},
+    {text:"水にうくもの／しずむものを1つずつ調べる。",level:1,minutes:7},
+    {text:"今日の天気を3語でメモし、明日の予想を1行。",level:1,minutes:6},
+    {text:"かげの長さを1回はかってメモする。",level:2,minutes:7},
+    {text:"磁石でくっつくものを2つ見つけよう。",level:2,minutes:7},
+    {text:"身近な生き物のようすを絵とことばで記録。",level:2,minutes:8},
+    {text:"とける？とけない？（砂糖と水など）をためす。",level:1,minutes:7},
+    {text:"見つけた石や葉を「大きい・小さい」で分ける。",level:2,minutes:8},
+    {text:"夜の空で星や月を1つ観察し、形をスケッチ。",level:1,minutes:8},
+    {text:"音はどう伝わる？身近な音を1つ調べて書く。",level:3,minutes:9}
+  ],
+  "人物のネタ":[
+    {text:"人物を1人えらび、どんな時代の人か1行で書く。",level:1,minutes:7},
+    {text:"その人の仕事を1つ見つけて、くわしく1行。",level:1,minutes:7},
+    {text:"出来事を2つならべてミニ年表にする。",level:2,minutes:8},
+    {text:"名言を1つ調べ、感じたことを1行で書く。",level:2,minutes:8},
+    {text:"関わった国や場所を地図で見つけてメモする。",level:2,minutes:9},
+    {text:"その人に聞いてみたい質問を2つ考える。",level:1,minutes:6},
+    {text:"同じ時代の別の人物を1人見つけて共通点を書く。",level:3,minutes:10},
+    {text:"その人の似顔絵をかんたんにかいてみよう。",level:1,minutes:8},
+    {text:"今日わかったことを3つ、箇条書きにする。",level:2,minutes:8},
+    {text:"その人のすごいところを1つ、理由つきで書く。",level:3,minutes:9}
+  ],
+  "英語":[
+    {text:"あいさつ（Hello/Good morning）を声に出す。",level:1,minutes:3},
+    {text:"数字1〜10を英語で言ってみよう。",level:1,minutes:4},
+    {text:"身の回りの物に英語ラベルを2つ作って読もう。",level:1,minutes:6},
+    {text:"自分のなまえと好きなものを英語で1文ずつ。",level:2,minutes:7},
+    {text:"色の英単語を3つ書いて、声に出す。",level:1,minutes:5},
+    {text:"英単語を3つえらび、かんたん英文を各1文。",level:2,minutes:8},
+    {text:"短い英語文を音読して、動詞を1つ見つける。",level:2,minutes:7},
+    {text:"家族を英語で紹介する文を2文作る。",level:2,minutes:8},
+    {text:"時刻の言い方を1つ練習（It’s seven o’clock.など）。",level:3,minutes:8},
+    {text:"英単語カードを3枚作って3回ずつ読む。",level:2,minutes:8}
+  ]
+};
+const MESSAGES=[
+  "あなたのペースで大丈夫。焦らなくても進んでいます。",
+  "小さな一歩が、大きな変化につながります。",
+  "周りの人が、あなたをしっかり支えています。",
+  "笑顔で過ごせば、良いことが返ってきます。",
+  "失敗も経験の一つ。次につながる大切な時間です。",
+  "気持ちを切り替えれば、新しい道が見えてきます。",
+  "あなたの努力は、ちゃんと誰かに届いています。",
+  "今は休むことも大切な選択です。",
+  "自分を信じれば、不思議と力がわいてきます。",
+  "明日は今日より、もっと明るい一日になります。"
+];
+const RANKS=["📚大吉","📝中吉","💡吉","🙂小吉","🌱末吉"];
+
+/* ===== 要素 ===== */
+const canvas=document.getElementById("videoCanvas");
+const ctx=canvas.getContext("2d",{willReadFrequently:true});
+const video=document.getElementById("src");
+const fortuneBox=document.getElementById("fortune");
+const historyBox=document.getElementById("history");
+const clearHistoryBtn=document.getElementById("clearHistory");
+const stageWrap=document.getElementById("stageWrap");
+const hoverHint=document.getElementById("hoverHint");
+
+/* ===== シンプルRGBクロマキー（UIなし） =====
+   条件: g > 110 && r < 120 && b < 120 && g > r + 25 && g > b + 25 → 透明 */
 function draw() {
   const vw = video.videoWidth || canvas.width;
   const vh = video.videoHeight || canvas.height;
@@ -60,15 +185,12 @@ function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
   if (!video.paused && !video.ended) {
     ctx.drawImage(video, dx, dy, dw, dh);
-
-    // 簡易的なキーイング（明るい緑を主に除去）
     const img = ctx.getImageData(dx, dy, dw, dh);
     const d = img.data;
     for (let i=0;i<d.length;i+=4){
       const r=d[i], g=d[i+1], b=d[i+2];
-      // 必要に応じて閾値は調整してください
       if (g > 110 && r < 120 && b < 120 && g > r + 25 && g > b + 25) {
-        d[i+3] = 0; // 透明化
+        d[i+3] = 0; // 透明
       }
     }
     ctx.putImageData(img, dx, dy);
@@ -87,35 +209,67 @@ function loopWatch() {
 
 /* ===== 占い ===== */
 const pick = arr => arr[Math.floor(Math.random()*arr.length)];
-function doFortune() {
-  const rank = pick(FORTUNE_RANKS);
-  const subject = pick(SUBJECTS);
-  const mission = pick(MISSIONS);
-  const message = pick(MESSAGES);
-  const points = Math.floor(Math.random()*8)+3;
-  const bar = "■".repeat(points) + "□".repeat(10-points);
-  const text =
-    "🎉 今日のべんきょううん 🎉\n\n" +
-    `運勢： ${rank}\n` +
-    `やる気パワー： ${bar}（${points}/10）\n\n` +
-    `📖 おすすめ教科： ${subject}\n` +
-    `🎯 今日のミッション： ${mission}\n\n` +
-    `💬 メッセージ： ${message}`;
-  return {text};
+function buildFortuneHTML(){
+  const rank=pick(RANKS);
+  const subject=pick(SUBJECTS);
+  const missions=SUBJECT_MISSIONS[subject] || [{text:"今日のテーマで自由研究を1つ！",level:2,minutes:10}];
+  const m=pick(missions);
+  const points=Math.floor(Math.random()*8)+3; // 3..10
+  const bar="■".repeat(points)+"□".repeat(10-points);
+  const subjectHTML=applyRuby(subject);
+  const missionHTML=applyRuby(m.text);
+  const message=pick(MESSAGES);
+  return `
+    <div class="line">🎉 今日のべんきょううん 🎉</div>
+    <div class="line">運勢： ${rank}</div>
+    <div class="line">やる気パワー： <span class="mono">${bar}</span>（${points}/10）</div>
+    <div class="line">📖 おすすめ教科： ${subjectHTML}</div>
+    <div class="line">🎯 今日のミッション： ${missionHTML}</div>
+    <div class="line">　難易度：${"★".repeat(m.level)}（${["","やさしい","ふつう","チャレンジ"][m.level]}）　目安：${m.minutes}分</div>
+    <div class="line">💬 メッセージ： ${message}</div>
+  `;
 }
-function showFortune() {
-  const f = doFortune();
-  fortuneBox.textContent = f.text;
-  const div = document.createElement("div");
-  div.className = "history-item";
-  div.textContent = `${new Date().toLocaleString()}\n${f.text}`;
+function showFortune(){
+  const html=buildFortuneHTML();
+  fortuneBox.innerHTML=html;
+  const div=document.createElement("div");
+  div.className="history-item";
+  div.innerHTML=`<div class="muted">${new Date().toLocaleString()}</div>${html}`;
   historyBox.prepend(div);
+  addHistory({time:new Date().toLocaleString(), html});
 }
 
-/* ===== 入力（PC/スマホ） ===== */
+/* ===== 履歴（localStorage） ===== */
+const LS_KEY="fortuneHistorySimple";
+const loadHistory=()=>{try{return JSON.parse(localStorage.getItem(LS_KEY)||"[]");}catch(e){return[];}};
+const saveHistory=list=>localStorage.setItem(LS_KEY,JSON.stringify(list));
+function renderHistory(){
+  const list=loadHistory();
+  historyBox.innerHTML="";
+  for(const it of list){
+    const div=document.createElement("div");
+    div.className="history-item";
+    div.innerHTML=`<div class="muted">${it.time}</div>${it.html}`;
+    historyBox.appendChild(div);
+  }
+}
+function addHistory(entry){
+  const list=loadHistory();
+  list.unshift(entry);
+  if(list.length>300) list.pop();
+  saveHistory(list);
+}
+clearHistoryBtn.addEventListener("click", ()=>{
+  if(confirm("履歴をすべて削除しますか？")){
+    saveHistory([]); renderHistory();
+  }
+});
+
+/* ===== 入力 ===== */
 function pressStart(){
-  if (playing) return;       // 通常再生中は無視
+  if (playing) return;
   spinning = true;
+  shouldShowFortune=false;
   fortuneBox.textContent = "（長押し中… 離すと,占いが出ます）";
   video.currentTime = LOOP_START;
   video.play().catch(()=>{});
@@ -126,25 +280,22 @@ function pressEnd(){
   if (playing) return;
   spinning = false;
   playing = true;
-  // 続きから最後まで再生
+  shouldShowFortune=true;
   video.currentTime = LOOP_END;
   video.play().catch(()=>{});
 }
 
 /* ===== 再生終了時に占い ===== */
 video.addEventListener('ended', () => {
-  if (!playing) return;   // 通常再生が終わったときだけ
+  if (shouldShowFortune) { showFortune(); shouldShowFortune=false; }
   playing = false;
-  cancelAnimationFrame(rafId); rafId = null; // 描画ループ整理（任意）
-  showFortune();
+  cancelAnimationFrame(rafId); rafId = null;
 });
 
-/* ===== 履歴削除 ===== */
-clearHistoryBtn.addEventListener("click", () => {
-  if (confirm("履歴をすべて削除しますか？")) {
-    historyBox.innerHTML = "";
-  }
-});
+/* ===== ホバー案内（PC）／タッチで非表示 ===== */
+stageWrap.addEventListener('mouseenter', ()=> hoverHint.style.display='block');
+stageWrap.addEventListener('mouseleave', ()=> hoverHint.style.display='none');
+canvas.addEventListener('touchstart', ()=> hoverHint.style.display='none', {passive:true});
 
 /* ===== イベント登録 ===== */
 canvas.addEventListener('mousedown', e => { e.preventDefault(); pressStart(); });
@@ -154,7 +305,8 @@ window.addEventListener('touchend',   e => { e.preventDefault(); pressEnd(); }, 
 
 /* ===== 初期描画開始 ===== */
 video.addEventListener('loadeddata', () => { if (!rafId) draw(); });
-setTimeout(()=>{ if (!rafId) draw(); }, 1500);
+setTimeout(()=>{ if (!rafId) draw(); }, 1500); // 端末差対策
+renderHistory();
 </script>
 </body>
 </html>

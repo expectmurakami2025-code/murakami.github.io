@@ -26,7 +26,7 @@
 <body>
 
 <h1>ガラガラ球占い</h1>
-
+<p>↓を<ruby>長押<rt>ながお</rt></ruby>しして、はなすと「おみくじ」の玉が出ます。</p>
 <div class="stage-wrap" id="stageWrap" title="ここをながおしして、はなすと「おみくじ」の玉が出ます。">
   <canvas id="videoCanvas" width="300" height="300"></canvas>
   <div class="checker"></div>
@@ -150,16 +150,25 @@ const SUBJECT_MISSIONS = {
   ]
 };
 const MESSAGES=[
-  "あなたのペースで大丈夫。焦らなくても進んでいます。",
-  "小さな一歩が、大きな変化につながります。",
-  "周りの人が、あなたをしっかり支えています。",
-  "笑顔で過ごせば、良いことが返ってきます。",
-  "失敗も経験の一つ。次につながる大切な時間です。",
-  "気持ちを切り替えれば、新しい道が見えてきます。",
-  "あなたの努力は、ちゃんと誰かに届いています。",
-  "今は休むことも大切な選択です。",
-  "自分を信じれば、不思議と力がわいてきます。",
-  "明日は今日より、もっと明るい一日になります。"
+  "あなたのペースで大丈夫。<ruby>焦<rt>あせ</rt></ruby>らなくても進んでいます",
+  "小さな一歩が、大きな変化につながります",
+  "周りの人が、あなたをしっかり支えています",
+  "<ruby>笑顔<rt>えがお</rt></ruby>で<ruby>過<rt>す</rt></ruby>ごせば、良いことが返ってきます",
+  "失敗も<ruby>経験<rt>けいけん</rt></ruby>の一つ。次につながる大切な時間です",
+  "気持ちを切り<ruby>替<rt>か</rt></ruby>えれば、新しい道が見えてきます",
+  "あなたの努力は、ちゃんと<ruby>誰<rt>だれ</rt></ruby>かに届いています",
+  "今は休むことも大切な<ruby>選択<rt>せんたく</rt></ruby>です",
+  "明日は新しい出会いに恵まれる",
+  "笑顔が<ruby>幸運<rt>こううん</rt></ruby>を引き寄せる一日",
+  "努力が形になり夢へ近づける",
+  "小さな一歩が大きな未来を開く",
+  "<ruby>優<rt>やさ</rt></ruby>しい言葉が<ruby>幸運<rt>こううん</rt></ruby>を呼び込む",
+  "思い切った<ruby>挑戦<rt>ちょうせん</rt></ruby>に光が<ruby>射<rt>さ</rt></ruby>す日",
+ "周囲の支えで道が<ruby>拓<rt>ひら</rt></ruby>けていく",
+  "あなたの<ruby>魅力<rt>みりょく</rt></ruby>が<ruby>輝<rt>かがや</rt></ruby>きを増す日",
+  "素直な心が<ruby>奇跡<rt>きせき</rt></ruby>を引き寄せる",
+   "今日の行動が未来を明るくする",
+  "明日は今日より、もっと明るい一日になります"
 ];
 const RANKS=["📚大吉","📝中吉","💡吉","🙂小吉","🌱末吉"];
 
@@ -220,12 +229,11 @@ function buildFortuneHTML(){
   const missionHTML=applyRuby(m.text);
   const message=pick(MESSAGES);
   return `
-    <div class="line">🎉 今日のべんきょううん 🎉</div>
-    <div class="line">運勢： ${rank}</div>
+    <div class="line">🎉 今日の<ruby>勉強運<rt>べんきょううん</rt></ruby> 🎉</div>
+    <div class="line"><ruby>運勢<rt>うんせい</rt></ruby>： ${rank}</div>
     <div class="line">やる気パワー： <span class="mono">${bar}</span>（${points}/10）</div>
     <div class="line">📖 おすすめ教科： ${subjectHTML}</div>
-    <div class="line">🎯 今日のミッション： ${missionHTML}</div>
-    <div class="line">　難易度：${"★".repeat(m.level)}（${["","やさしい","ふつう","チャレンジ"][m.level]}）　目安：${m.minutes}分</div>
+
     <div class="line">💬 メッセージ： ${message}</div>
   `;
 }

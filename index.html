@@ -21,6 +21,7 @@
 </head>
 <body>
 
+
 <h1>ガラガラ球占い</h1>
 <p>↓を<ruby>長押<rt>ながお</rt></ruby>しして、はなすと「おみくじ」の玉が出ます。</p>
 <div class="stage-wrap" id="stageWrap" title="ここをながおしして、はなすと「おみくじ」の玉が出ます。">
@@ -31,13 +32,15 @@
 <div id="fortune">（ここに占い結果が表示されます）</div>
 
 <!-- 非表示の動画（音声なし） -->
-<video id="src" src="garagara.mp4" playsinline preload="auto" style="display:none"></video>
+<video id="src" src="garagara.mp4" playsinline preload="auto" muted style="display:none"></video>
 
 <script>
 /* ===== 設定・状態 ===== */
-const LOOP_START = 0.0;
-const LOOP_END   = 1.0;
-let spinning=false, playing=false, shouldShowFortune=false, rafId=null;
+const LOOP_START = 0.0;   // 押下中：ここから
+const LOOP_END   = 1.0;   // 押下中：ここまでをループ（離したらここから本再生）
+const LOOP_EPS   = 1/30;  // だいたい1フレーム分（境界でのチラつき回避）
+let holding=false, playingTail=false, shouldShowFortune=false;
+let rafId=null, loopRafId=null;
 
 /* ===== ふりがな辞書 ===== */
 const RUBIES = [
@@ -57,9 +60,25 @@ function applyRuby(str){
 /* ===== 占いデータ ===== */
 const SUBJECTS=["読書","算数","漢字","理科","人物のネタ","英語"];
 const MESSAGES=[
-  "あなたのペースで大丈夫。",
+"あなたのペースで大丈夫。<ruby>焦<rt>あせ</rt></ruby>らなくても進んでいます",
   "小さな一歩が、大きな変化につながります",
-  "笑顔で過ごせば良いことがあります"
+  "周りの人が、あなたをしっかり支えています",
+  "<ruby>笑顔<rt>えがお</rt></ruby>で<ruby>過<rt>す</rt></ruby>ごせば、良いことが返ってきます",
+  "失敗も<ruby>経験<rt>けいけん</rt></ruby>の一つ。次につながる大切な時間です",
+  "気持ちを切り<ruby>替<rt>か</rt></ruby>えれば、新しい道が見えてきます",
+  "あなたの努力は、ちゃんと<ruby>誰<rt>だれ</rt></ruby>かに届いています",
+  "今は休むことも大切な<ruby>選択<rt>せんたく</rt></ruby>です",
+  "明日は新しい出会いに恵まれる",
+  "笑顔が<ruby>幸運<rt>こううん</rt></ruby>を引き寄せる一日",
+  "努力が形になり夢へ近づける",
+  "小さな一歩が大きな未来を開く",
+  "<ruby>優<rt>やさ</rt></ruby>しい言葉が<ruby>幸運<rt>こううん</rt></ruby>を呼び込む",
+  "思い切った<ruby>挑戦<rt>ちょうせん</rt></ruby>に光が<ruby>射<rt>さ</rt></ruby>す日",
+  "周囲の支えで道が<ruby>拓<rt>ひら</rt></ruby>けていく",
+  "あなたの<ruby>魅力<rt>みりょく</rt></ruby>が<ruby>輝<rt>かがや</rt></ruby>きを増す日",
+  "素直な心が<ruby>奇跡<rt>きせき</rt></ruby>を引き寄せる",
+  "今日の行動が未来を明るくする",
+  "明日は今日より、もっと明るい一日になります"
 ];
 const RANKS=["📚大吉","📝中吉","💡吉","🙂小吉","🌱末吉"];
 
@@ -113,28 +132,59 @@ function showFortune(){
   fortuneBox.innerHTML=buildFortuneHTML();
 }
 
+/* ===== ループ監視（押下中 0.0〜1.0s を往復ではなく区間ループ） ===== */
+function startLoopGuard(){
+  if (loopRafId) return;
+  const loopTick = () => {
+    if (!holding) { loopRafId = null; return; }
+    // ループ上端を越えたら巻き戻す
+    if (video.currentTime >= (LOOP_END - LOOP_EPS)) {
+      // わずかに余裕を持たせて巻き戻し（境界での停止を回避）
+      const target = LOOP_START + 0.002;
+      if (!video.seeking) video.currentTime = target;
+    }
+    // なんらかで止まっていたら再開
+    if (video.paused) { video.play().catch(()=>{}); }
+    loopRafId = requestAnimationFrame(loopTick);
+  };
+  loopRafId = requestAnimationFrame(loopTick);
+}
+
 /* ===== 入力 ===== */
 function pressStart(){
-  if (playing) return;
-  spinning = true;
+  if (playingTail) return;           // 尾部再生中は無視
+  holding = true;
   shouldShowFortune=false;
   fortuneBox.textContent = "（長押し中… 離すと占いが出ます）";
-  video.currentTime = LOOP_START;
+
+  // 押下で 0.0s から再生開始し、監視で 0.0〜1.0s をループ
+  // 先に currentTime を合わせてから play（モバイル互換）
+  try { video.currentTime = LOOP_START; } catch(_){}
   video.play().catch(()=>{});
+  startLoopGuard();
   if (!rafId) draw();
 }
+
 function pressEnd(){
-  if (playing) return;
-  spinning = false;
-  playing = true;
+  if (!holding) return;
+  holding = false;
+  playingTail = true;
   shouldShowFortune=true;
-  video.currentTime = LOOP_END;
+
+  // ループ終了：1.0s 位置に送り、そこから最後まで本再生
+  try {
+    if (video.currentTime < LOOP_END - LOOP_EPS || video.currentTime > LOOP_END + 0.2) {
+      video.currentTime = LOOP_END;
+    }
+  } catch(_){}
   video.play().catch(()=>{});
 }
+
 video.addEventListener('ended', () => {
   if (shouldShowFortune) { showFortune(); shouldShowFortune=false; }
-  playing = false;
-  cancelAnimationFrame(rafId); rafId = null;
+  playingTail = false;
+
+  // 次の操作に備えて描画ループは維持、動画は停止状態
 });
 
 /* ===== ホバー案内 ===== */
@@ -149,9 +199,12 @@ canvas.addEventListener('touchstart', e => { e.preventDefault(); pressStart(); }
 window.addEventListener('touchend',   e => { e.preventDefault(); pressEnd(); },   {passive:false});
 
 /* ===== 初期描画開始 ===== */
-video.addEventListener('loadeddata', () => { if (!rafId) draw(); });
-setTimeout(()=>{ if (!rafId) draw(); }, 1500);
+video.addEventListener('loadeddata', () => {
+  // iOSなどでのスタート安定化
+  video.muted = true;
+  if (!rafId) draw();
+});
+setTimeout(()=>{ if (!rafId) draw(); }, 1200);
 </script>
 </body>
 </html>
-

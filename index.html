@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ガラガラ球占い</title>
+<title><ruby>自主勉<rt>じしゅべん</rt></ruby>うらない</title>
 <style>
   body{font-family:system-ui,-apple-system,"Segoe UI",Meiryo,Arial,sans-serif;text-align:center;background:#fafafa;margin:0;padding:24px}
   h1{margin:0 0 6px}
@@ -22,14 +22,14 @@
 <body>
 
 
-<h1>ガラガラ<ruby>球占<rt>だまうらな</rt></ruby>い</h1>
+<h1><ruby>自主勉<rt>じしゅべん</rt></ruby>うらない</h1>
 <p>↓を<ruby>長押<rt>ながお</rt></ruby>しして、はなすと「おみくじ」の玉が出ます。</p>
 <div class="stage-wrap" id="stageWrap" title="ここをながおしして、はなすと「おみくじ」の玉が出ます。">
   <canvas id="videoCanvas" width="300" height="300" ></canvas>
   <div class="checker"></div>
 </div>
 
-<div id="fortune">（ここに<ruby>占<rt>うらな</rt></ruby>い結果が表示されます）</div>
+<div id="fortune">（ここに占い結果が表示されます）</div>
 
 <!-- 非表示の動画（音声なし） -->
 <video id="src" src="garagara.mp4" playsinline preload="auto" muted style="display:none"></video>
@@ -122,9 +122,9 @@ function buildFortuneHTML(){
   const subject=pick(SUBJECTS);
   const message=pick(MESSAGES);
   return `
-    <div class="line">🎉 今日の<ruby>勉強運<rt>べんきょううん</rt></ruby> 🎉</div>
-    <div class="line"><ruby>運勢<rt>うんせい</rt></ruby>： ${rank}</div>
-    <div class="line">📖 おすすめ<ruby>教科<rt>きょうか</rt></ruby>： ${applyRuby(subject)}</div>
+    <div class="line">🎉 今日の勉強運 🎉</div>
+    <div class="line">運勢： ${rank}</div>
+    <div class="line">📖 おすすめ教科： ${applyRuby(subject)}</div>
     <div class="line">💬 メッセージ： ${message}</div>
   `;
 }
